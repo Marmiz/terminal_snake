@@ -14,6 +14,7 @@ enum Directions {
     Down,
     Left,
     Right,
+    Stop,
 }
 
 struct Food {
@@ -21,7 +22,7 @@ struct Food {
     y: usize,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 struct Coords {
     x: usize,
     y: usize,
@@ -67,6 +68,9 @@ impl Game {
                     Key::Char('d') => {
                         self.set_direction(Directions::Right);
                     }
+                    Key::Char('m') => {
+                        self.set_direction(Directions::Stop);
+                    }
                     _ => {}
                 },
                 Err(e) => panic!("An error occurred: {}", e.to_string()),
@@ -78,16 +82,31 @@ impl Game {
     }
 
     fn update_scene(&mut self) {
+        // avoid updating if game is stopped
+        if self.direction == Directions::Stop {
+            return;
+        }
         // update snake coordinates
         match self.direction {
             Directions::Left => self.move_snake_left(),
             Directions::Right => self.move_snake_right(),
             Directions::Up => self.move_snake_up(),
             Directions::Down => self.move_snake_down(),
+            _ => {}
         }
 
         // check collisions:
         let head = self.snake[0];
+
+        let mut tail = self.snake.clone();
+        tail.remove(0);
+        match tail.iter().find(|&&x| x == head) {
+            Some(_x) => {
+                self.set_direction(Directions::Stop);
+                return;
+            }
+            None => {}
+        }
 
         // food collision
         if head.x == self.food.x && head.y == self.food.y {
@@ -271,6 +290,7 @@ impl Game {
                     self.direction = Directions::Down
                 }
             }
+            Directions::Stop => self.direction = Directions::Stop,
         }
     }
 }
@@ -288,13 +308,13 @@ fn main() {
 
     let food = generate_random_food((w, h));
 
-    let initial_snake = Coords {
+    let _initial_snake = Coords {
         x: (w / 2) - 1,
         y: (h / 2) - 1,
     };
 
     let mut debug_snake = Vec::new();
-    for z in 1..5 {
+    for z in 1..35 {
         debug_snake.push(Coords { x: z, y: 5 })
     }
 
