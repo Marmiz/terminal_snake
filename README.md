@@ -4,6 +4,8 @@ A simple snake Game that runs inside the terminal.
 
 Made with [rustbox](https://github.com/gchp/rustbox), Rust's termbox implementation.
 
+![](snake.gif)
+
 ```
 $ cargo build
 $ cargo run
