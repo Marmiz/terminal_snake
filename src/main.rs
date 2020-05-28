@@ -33,11 +33,10 @@ struct Game {
     score: u64,
     scene_w: usize,
     scene_h: usize,
-    head_x: usize,
-    head_y: usize,
     direction: Directions,
     rustbox: RustBox,
     snake: Vec<Coords>,
+    game_over: bool,
 }
 
 impl Game {
@@ -50,6 +49,7 @@ impl Game {
             match self
                 .rustbox
                 // .poll_event(false)
+                // 20 fps
                 .peek_event(Duration::new(0, 1_000_000_000u32 / 20), false)
             {
                 Ok(rustbox::Event::KeyEvent(key)) => match key {
@@ -71,21 +71,26 @@ impl Game {
                     Key::Char('m') => {
                         self.set_direction(Directions::Stop);
                     }
+                    Key::Char('n') => {
+                        if self.game_over == true {
+                            self.start_new_game();
+                        }
+                    }
                     _ => {}
                 },
                 Err(e) => panic!("An error occurred: {}", e.to_string()),
                 _ => {}
             }
-            self.update_scene();
-            self.paint_scene();
+            if self.game_over == false {
+                self.update_scene();
+                self.paint_scene();
+            } else {
+                self.draw_end_screen();
+            }
         }
     }
 
     fn update_scene(&mut self) {
-        // avoid updating if game is stopped
-        if self.direction == Directions::Stop {
-            return;
-        }
         // update snake coordinates
         match self.direction {
             Directions::Left => self.move_snake_left(),
@@ -98,17 +103,18 @@ impl Game {
         // check collisions:
         let head = self.snake[0];
 
+        // check if eating itself:
+        // tail is is all but Snake[0] (the head)
         let mut tail = self.snake.clone();
         tail.remove(0);
-        match tail.iter().find(|&&x| x == head) {
-            Some(_x) => {
-                self.set_direction(Directions::Stop);
-                return;
-            }
-            None => {}
+        // if head has same Coords that one of the tail means we are colliding
+        if let Some(_x) = tail.iter().find(|&&x| x == head) {
+            self.set_direction(Directions::Stop);
+            self.game_over();
+            // return;
         }
 
-        // food collision
+        // check food collision
         if head.x == self.food.x && head.y == self.food.y {
             self.score += 1;
             // pass the "old" food coordinates, those will be the new node
@@ -126,7 +132,7 @@ impl Game {
         self.draw_snake();
         self.draw_food();
         self.draw_menu();
-        self.draw_debug();
+        // self.draw_debug();
         self.rustbox.present();
     }
 
@@ -138,7 +144,7 @@ impl Game {
                 rustbox::RB_BOLD,
                 Color::Byte(0xa2),
                 Color::Byte(0xa2),
-                "S",
+                "s",
             )
         }
     }
@@ -150,7 +156,7 @@ impl Game {
             rustbox::RB_NORMAL,
             Color::White,
             Color::Cyan,
-            "F",
+            "f",
         )
     }
 
@@ -161,24 +167,21 @@ impl Game {
             rustbox::RB_NORMAL,
             Color::White,
             Color::Black,
-            &format!("Score: {} | Press 'q' to exit", self.score),
+            &format!("Score: {} | Press 'q' to exit | 'wasd' to move", self.score),
         )
     }
 
+    // Dev only
+    #[allow(dead_code)]
     fn draw_debug(&self) {
+        let head = self.snake[0];
         self.rustbox.print(
             1,
             self.scene_h - 1,
             rustbox::RB_NORMAL,
             Color::White,
             Color::Black,
-            &print_debug_info(
-                self.head_x,
-                self.head_y,
-                self.scene_w,
-                self.scene_h,
-                &self.direction,
-            ),
+            &print_debug_info(head.x, head.y, self.scene_w, self.scene_h, &self.direction),
         )
     }
 
@@ -230,7 +233,8 @@ impl Game {
 
     fn move_snake_up(&mut self) {
         let mut head = self.snake[0];
-        if head.y == 0 {
+        // row [0] is used by score and other system messages
+        if head.y == 1 {
             head = Coords {
                 x: head.x,
                 y: self.scene_h - 1,
@@ -293,6 +297,41 @@ impl Game {
             Directions::Stop => self.direction = Directions::Stop,
         }
     }
+
+    fn draw_end_screen(&self) {
+        let s = format!(
+            "Game Over | Final Score: {} | 'n' to start a new game | 'q' to quit",
+            self.score
+        );
+
+        self.rustbox.print(
+            (self.scene_w / 2) - (s.len() / 2),
+            self.scene_h / 2,
+            rustbox::RB_NORMAL,
+            Color::White,
+            Color::Black,
+            &s,
+        );
+
+        self.rustbox.present();
+    }
+
+    fn game_over(&mut self) {
+        self.game_over = true;
+    }
+
+    fn start_new_game(&mut self) {
+        self.game_over = false;
+        self.score = 0;
+        self.set_direction(Directions::Left);
+
+        let initial_snake = Coords {
+            x: (self.scene_w / 2) - 1,
+            y: (self.scene_h / 2) - 1,
+        };
+
+        self.snake = vec![initial_snake];
+    }
 }
 
 fn main() {
@@ -308,26 +347,20 @@ fn main() {
 
     let food = generate_random_food((w, h));
 
-    let _initial_snake = Coords {
+    let initial_snake = Coords {
         x: (w / 2) - 1,
         y: (h / 2) - 1,
     };
 
-    let mut debug_snake = Vec::new();
-    for z in 1..35 {
-        debug_snake.push(Coords { x: z, y: 5 })
-    }
-
     let mut game = Game {
         scene_w: w,
         scene_h: h,
-        head_x: ((w / 2) - 1),
-        head_y: ((h / 2) - 1),
         direction: Directions::Left,
-        rustbox: rustbox,
-        food: food,
+        rustbox,
+        food,
         score: 0,
-        snake: debug_snake, // snake: vec![initial_snake],
+        snake: vec![initial_snake],
+        game_over: false,
     };
 
     game.new();
@@ -336,11 +369,22 @@ fn main() {
 fn generate_random_food(coord: (usize, usize)) -> Food {
     let mut rng = rand::thread_rng();
     let (x, y) = coord;
-    let food = Food {
+    Food {
         x: rng.gen_range(0, x),
-        y: rng.gen_range(0, y),
-    };
-    food
+        // from 1 - row 0 is used for game related messaes
+        y: rng.gen_range(1, y),
+    }
+}
+
+// Use for Dev purposes
+// create a 35 long snake
+#[allow(dead_code)]
+fn generate_debug_snake() -> Vec<Coords> {
+    let mut debug_snake = Vec::new();
+    for z in 1..35 {
+        debug_snake.push(Coords { x: z, y: 5 })
+    }
+    debug_snake
 }
 
 #[allow(dead_code)]
